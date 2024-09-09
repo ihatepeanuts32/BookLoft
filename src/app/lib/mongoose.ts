@@ -1,16 +1,37 @@
 import mongoose from 'mongoose';
-import dontenv from 'dotenv'
 
-dontenv.config();
+const MONGO_URL = process.env.MONGO_URL || '';
 
-const connectToDB = async () => {
-  try {
-    await mongoose.connect(process.env.MONGO_URL!)
-    console.log("Database connected successfully")
-
-  } catch(err) {
-    console.log("Failed to connect to database", err)
-  }
+if (!MONGO_URL) {
+  throw new Error('Please define the MONGO_URL environment variable inside .env.local');
 }
 
-export default connectToDB;
+declare global {
+  var mongoose: {
+    conn: mongoose.Connection | null;
+    promise: Promise<mongoose.Connection> | null;
+  };
+}
+
+let cached = global.mongoose;
+
+if (!cached) {
+  cached = global.mongoose = { conn: null, promise: null };
+}
+
+export async function connectToDB() {
+  if (cached.conn) {
+    return cached.conn;
+  }
+
+  if (!cached.promise) {
+    const opts = {
+      bufferCommands: false,
+    };
+
+    cached.promise = mongoose.connect(MONGO_URL, opts).then((mongoose) => mongoose.connection);
+  }
+
+  cached.conn = await cached.promise;
+  return cached.conn;
+}
